@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
+        integrity="sha256-kLaT2GOSpHechhsozzB+flnD+zUyjE2LlfWPgU04xyI=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"
+        integrity="sha256-WBkoXOwTeyKclOHuWtc+i2uENFpDZ9YPdf5Hf+D7ewM=" crossorigin=""></script>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-polylinedecorator/1.0.1/leaflet.polylineDecorator.min.js"></script>
+</head>
+
+<body>
+    <style>
+        #map {
+            margin-top: 3vh;
+            margin-left: 0.5vw;
+            height: 94vh;
+            width: 80vw;
+            float: left;
+
+        }
+
+        #info {
+            border: 1px solid black;
+            margin-top: 3vh;
+            height: 94vh;
+            width: 17.5vw;
+            float: left;
+
+        }
+
+        @keyframes rotate {
+
+            from {
+                transform: rotate(0deg)
+            }
+
+            to {
+                transform: rotate(360deg)
+            }
+
+        }
+
+
+        .refresh-start {
+
+            animation-name: rotate;
+            animation-duration: 1s;
+            animation-iteration-count: infinite;
+            animation-timing-function: linear;
+            animation-play-state: running;
+
+        }
+    </style>
+    <script>
+        // Yes I know this is spaghetti code
+        // FIXME: (never gonna be fixed)
+        const url = "http://localhost:8080/"
+        const auth = "?" + new URLSearchParams({
+            "username": "username",
+            "password": "password"
+        });
+
+        const Colors = {
+            aqua: "#00ffff",
+            green: "#008000",
+            azure: "#f0ffff",
+            red: "#ff0000",
+            black: "#000000",
+            blue: "#0000ff",
+            brown: "#a52a2a",
+            orange: "#ffa500",
+            darkred: "#8b0000",
+            navy: "#000080",
+            darkblue: "#00008b",
+            darkcyan: "#008b8b",
+            darkgrey: "#a9a9a9",
+            darkgreen: "#006400",
+            darkkhaki: "#bdb76b",
+            darkmagenta: "#8b008b",
+            darkolivegreen: "#556b2f",
+            darkorange: "#ff8c00",
+            darkorchid: "#9932cc",
+            darkviolet: "#9400d3",
+            fuchsia: "#ff00ff",
+            gold: "#ffd700",
+            indigo: "#4b0082",
+            khaki: "#f0e68c",
+            darksalmon: "#e9967a",
+            lightblue: "#add8e6",
+            lightcyan: "#e0ffff",
+            lightgreen: "#90ee90",
+            lightgrey: "#d3d3d3",
+            lightpink: "#ffb6c1",
+            lightyellow: "#ffffe0",
+            lime: "#00ff00",
+            magenta: "#ff00ff",
+            maroon: "#800000",
+            cyan: "#00ffff",
+            olive: "#808000",
+            pink: "#ffc0cb",
+            purple: "#800080",
+            violet: "#800080"
+        };
+
+        function get_colors(n) {
+            const values = Object.values(Colors);
+            return n > values.length ? null : values.slice(0, n);
+        }
+
+        let map;
+        let layer_group;
+        let interval;
+        let last_updated;
+
+
+        async function get_api(url) {
+            const response = await fetch(url + auth);
+            const json = await response.json();
+            return json;
+        }
+
+        async function update_locations() {
+            let locations = (await get_api(url + "get_locations")).locations;
+            let foods = (await get_api(url + "get_foods")).foods;
+
+            let food_at_each_location = {};
+
+            for (let food of foods) {
+                let location = food.location;
+                if (!(location in food_at_each_location)) {
+                    food_at_each_location[location] = [];
+                }
+                food_at_each_location[location].push(food);
+            }
+
+            for (let location of locations) {
+                let food_at_location = food_at_each_location[location.id] || [];
+                let str_foods = food_at_location.reduce((acc, food) => `${acc}<br/>${food.description} (id: ${food.id})`, "");
+                L.marker([location.latitude, location.longitude])
+                    .bindPopup(`<b>${location.address}</b> ${str_foods}`)
+                    .addTo(layer_group);
+
+            }
+
+        }
+        async function add_history() {
+            let history = (await get_api(url + "get_history")).history;
+            let foods = (await get_api(url + "get_foods")).foods;
+            let locations = (await get_api(url + "get_locations")).locations;
+
+            let history_of_each_batch = {};
+
+            for (let entry of history) {
+                let food = foods.find(el => el.id === entry.food);
+                let source = locations.find(el => el.id === entry.source);
+                let destination = locations.find(el => el.id === entry.destination);
+                let batch = food.batch;
+                if (!(batch in history_of_each_batch)) {
+                    history_of_each_batch[batch] = [];
+                }
+
+                let source_coords = [source.latitude, source.longitude];
+                let destination_coords = [destination.latitude, destination.longitude];
+
+                history_of_each_batch[batch].push([source_coords, destination_coords]);
+
+            }
+            let batch_count = Object.entries(history_of_each_batch).length;
+            let colors = get_colors(batch_count);
+            let i = 0;
+            for (let [batch, history] of Object.entries(history_of_each_batch)) {
+
+                let color = colors[i++];
+                for (let location of history) {
+                    let polyline = L.polyline(location, { color: color })
+                        .bindPopup(`Batch ${batch}`)
+                        .addTo(layer_group);
+                    let decorator = L.polylineDecorator(polyline, {
+                        patterns: [
+                            {
+                                offset: 0,
+                                repeat: 100,
+                                symbol: L.Symbol.arrowHead({ pixelSize: 10, pathOptions: { color: color, fillOpacity: 1 } })
+                            },
+                        ]
+                    })
+                        .addTo(layer_group);
+
+                }
+            }
+        }
+        async function update() {
+            document.getElementById("refresh_btn").firstChild.classList.add("refresh-start");
+            setTimeout(() => {
+                document.getElementById("refresh_btn").firstChild.classList.remove("refresh-start");
+            }, 500);
+            layer_group.clearLayers();
+            await update_locations();
+            await add_history();
+            last_updated = 0;
+            clearInterval(interval);
+            update_info();
+            interval = setInterval(update_info, 5000);
+        }
+
+        function update_info() {
+            let msg = "Last updated: ";
+            if (last_updated < 5) {
+                msg += "Just now";
+            } else if (last_updated <= 60) {
+                msg += `${Math.floor(last_updated / 5) * 5} seconds ago`;
+            } else {
+                let minutes = Math.floor(last_updated / 60);
+                if (minutes === 1) {
+                    msg += `${minutes} minute ago`;
+                } else {
+                    msg += `${minutes} minutes ago`;
+                }
+            }
+            document.getElementById("last_updated_info").innerText = msg;
+            last_updated += 5;
+        }
+
+        window.onload = async () => {
+            map = L.map('map').setView([37.8, -96], 4);
+            layer_group = L.layerGroup().addTo(map);
+            let tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            }).addTo(map);
+            L.Control.textbox = L.Control.extend({
+                onAdd: function (map) {
+                    let parent = L.DomUtil.create("div");
+                    let text = L.DomUtil.create("div");
+                    let button = L.DomUtil.create("button");
+                    let img = L.DomUtil.create("img");
+
+                    text.id = "last_updated_info";
+                    button.id = "refresh_btn";
+                    text.style = "float: left;";
+                    button.style = "float: left; background: transparent; border: none !important;";
+                    button.setAttribute("onClick", "update()")
+                    img.setAttribute("height", "12");
+                    img.setAttribute("width", "12");
+                    img.setAttribute("src", "./refresh-icon.svg");
+
+                    parent.appendChild(text);
+                    button.appendChild(img);
+                    parent.appendChild(button);
+
+                    return parent;
+                },
+
+                onRemove: function (map) {
+                    // Nothing to do here
+                }
+            });
+            L.control.textbox = (opts) => new L.Control.textbox(opts);
+            L.control.textbox({ position: 'bottomleft' }).addTo(map);
+
+            await update();
+            setInterval(update, 1000 * 60 * 5);
+        };
+
+
+        async function on_food_entry() {
+            document.getElementById("entered_food_info").innerText = "";
+            let food_id = document.getElementById("entered_food").value;
+            let info = document.getElementById("entered_food_info");
+            if (isNaN(food_id)) {
+                info.innerHTML = "Invalid id";
+                return;
+            }
+            let food = await get_api(url + "get_food/" + food_id);
+            if ("error" in food) {
+                info.innerHTML = "No food with given id";
+                return;
+            }
+            let batch = await get_api(url + "get_foods_from_batch/" + food.batch);
+            let locations = (await get_api(url + "get_locations")).locations;
+
+            let foods = batch.foods;
+
+            info.innerHTML = "<b>Recall these foods</b>: ";
+            info.innerHTML += foods.reduce((acc, food) => {
+                let location = locations.find(el => el.id === food.location);
+                return `${acc}<br/>${food.description} (id: ${food.id}) at ${location.address}`
+            }, "");
+        }
+    </script>
+    <div id="map"></div>
+    <div id="info">
+        <form action="#" onsubmit="return on_food_entry()">
+            <div style="width:100%;text-align:center;margin-top:1vh;margin-bottom:1vh">
+                <b>
+                    Enter a food id to see what food to recall
+                </b>
+            </div>
+            <input type="text" id="entered_food" placeholder="Food Id"
+                style="width:15vw; height:5vh; margin-left:1vw; font-size:20px; border-radius:10px">
+            <input type="submit" value="Submit" style="width:11vw; margin-left:3vw; margin-top:1vh; font-size:15px">
+            <div id="entered_food_info" style="margin-top:1vh">
+
+            </div>
+        </form>
+    </div>
+</body>
+
+</html>
