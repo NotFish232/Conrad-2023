@@ -181,7 +181,7 @@
                         patterns: [
                             {
                                 offset: 0,
-                                repeat: 100,
+                                repeat: 200,
                                 symbol: L.Symbol.arrowHead({ pixelSize: 10, pathOptions: { color: color, fillOpacity: 1 } })
                             },
                         ]
@@ -224,11 +224,13 @@
         }
 
         window.onload = async () => {
-            map = L.map('map').setView([37.8, -96], 4);
+            map = L.map("map", {
+                preferCanvas: true
+            }).setView([37.8, -96], 4);
             layer_group = L.layerGroup().addTo(map);
-            let tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            let tiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
                 maxZoom: 19,
-                attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                attribution: `&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>`
             }).addTo(map);
             L.Control.textbox = L.Control.extend({
                 onAdd: function (map) {
@@ -258,7 +260,7 @@
                 }
             });
             L.control.textbox = (opts) => new L.Control.textbox(opts);
-            L.control.textbox({ position: 'bottomleft' }).addTo(map);
+            L.control.textbox({ position: "bottomleft" }).addTo(map);
 
             await update();
             setInterval(update, 1000 * 60 * 5);

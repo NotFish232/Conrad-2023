@@ -64,7 +64,7 @@ def get_users() -> tuple[dict, int]:
 
 @app.route("/get_user/<int:id>", methods=["get"])
 @authorization_required()
-def get_user(id: int) -> tuple[dict, any]:
+def get_user(id: int) -> tuple[dict, int]:
 
     curser = con.execute("""
     SELECT username, email FROM User where id = ?;
